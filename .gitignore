@@ -1,0 +1,13 @@
+/experiments
+/data/*
+/.ipynb_checkpoints
+/env
+/models/product2vec.model
+/old
+.DS_store
+/lib/.DS_store
+/.idea
+/temp_data
+/lib/__pycache__
+/tests/.*
+models/__pycache__
