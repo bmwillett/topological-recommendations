@@ -26,7 +26,7 @@ class MapperClassifier:
         self.graphs, self.mapper_pipes = runMapper(self.n_components, self.data, self.rep, remake=remake)
 
     def _makeGraphBins(self, remake=True):
-        self.total_graphbinm, self.featlen = makeGraphBins(self.n_components, self.data, self.data_header, self.graphs, remake=remake)
+        self.total_graphbinm, self.featlen, self.total_graphbin = makeGraphBins(self.n_components, self.data, self.data_header, self.graphs, remake=remake)
 
     def project(self, datatest, datatest_header, remake=True):
         self.total_test_rep = projectTestData(self.n_components, self.rep, self.data, datatest, datatest_header,

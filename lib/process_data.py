@@ -25,6 +25,11 @@ import sys, os
 IC_DATA_DIR = '../data/instacart_2017_05_01/'
 SMALL_IC_DATA_DIR = '../data/instacart_2017_05_01_small/'
 
+def get_instacart_OrderData(data_dir=IC_DATA_DIR):
+    order_data, product_data = instacart_process(data_dir=data_dir)
+    IC_order_data =  OrderData(order_data, product_data)
+    return IC_order_data
+
 def instacart_process(data_dir=IC_DATA_DIR):
     """
     load and preprocess instacart dataset
@@ -74,7 +79,6 @@ def instacart_process(data_dir=IC_DATA_DIR):
     product_data.set_index('product_id', inplace=True)
 
     return order_data, product_data
-
 
 def make_instacart_small(user_frac=0.01, order_frac=1, product_frac=1, data_dir=IC_DATA_DIR,
                          output_dir=SMALL_IC_DATA_DIR):

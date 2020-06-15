@@ -5,7 +5,7 @@ sys.path.append('../lib/')
 from mapper_tools import *
 from mapper_class import MapperClassifier
 
-# file directories
+# file directories (use small for faster testing)
 DATA_DIR_TRAIN = '../data/data_train_fashion_unnormalized/'
 DATA_DIR_TEST = '../data/data_test_fashion_unnormalized/'
 SMALL_DATA_DIR_TRAIN = '../data/small_data_train_fashion_unnormalized/'
@@ -16,7 +16,6 @@ n_components=15 # number of components in projection
 NRNN = 3 # number of nearest neighbors to use in projecting test data
 label = "PCA%d" % (n_components)
 
-
 # load data
 data, data_header, datatest, datatest_header = loadMapperData(data_dir_train = SMALL_DATA_DIR_TRAIN,
                                       data_dir_test = SMALL_DATA_DIR_TEST)
@@ -24,8 +23,8 @@ data, data_header, datatest, datatest_header = loadMapperData(data_dir_train = S
 
 mapper = MapperClassifier(n_components=n_components, NRNN=NRNN)
 
+# these are the inputs for neural network classifier for train and test data
 total_graphbinm = mapper.fit(data, data_header)
-
 total_test_rep = mapper.project(datatest, datatest_header)
 
 print(total_graphbinm.shape)

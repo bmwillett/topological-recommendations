@@ -10,6 +10,9 @@ from sklearn.cluster import KMeans
 from sklearn import metrics
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+from keras.layers import Input, Dense
+from keras.models import Model
+import tensorflow as tf
 
 def get_word2vec_model(train_orders, prior_orders, products, retrain=True, model_dir= './models/', verbose=1):
     """
