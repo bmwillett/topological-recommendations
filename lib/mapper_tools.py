@@ -1,4 +1,4 @@
-from mapper_tools import *
+from tools import *
 import pandas as pd
 import numpy as np
 import sklearn
@@ -8,6 +8,9 @@ from sklearn.pipeline import Pipeline
 from gtda.mapper import *
 import pickle
 from joblib import Parallel, delayed
+import logging
+log = logging.getLogger("TP_logger")
+
 
 DATA_DIR_TRAIN = '../data/data_train_fashion_unnormalized/'
 DATA_DIR_TEST = '../data/data_test_fashion_unnormalized/'
@@ -30,6 +33,7 @@ class LatentRep():
     def __init__(self, projectors, label):
         self.projectors = projectors
         self.label = label
+
     def transform(self, X):
         rep = []
         for proj in self.projectors:
@@ -112,7 +116,11 @@ def runMapper(n_components, data, rep, remake=True, verbose=0):
     mapper_pipes = []
     pca=rep.projectors[0]
 
+    if log.level == logging.DEBUG:
+        print("------> creating projection components...")
     for k in range(n_components):
+        if log.level == logging.DEBUG:
+            print("---------> on component {}/{}...".format(k+1,n_components))
         proj = Projection(columns = k)
         filter_func = Pipeline(steps=[('pca', pca), ('proj', proj)])
         cover = OneDimensionalCover(n_intervals=10, overlap_frac=0.33)
@@ -126,11 +134,14 @@ def runMapper(n_components, data, rep, remake=True, verbose=0):
         mapper_pipes.append( ("PCA%d" % (k+1), mapper_pipe ) )
 
     # try parallelization
-
-    graphs = Parallel(n_jobs=5, prefer="threads")(
-        delayed(mapper_pipe[1].fit_transform)(data) for mapper_pipe in mapper_pipes
-    )
-
+    if log.level == logging.DEBUG:
+        print("------> entering parallelization...")
+    with elapsed_timer() as elapsed:
+        graphs = Parallel(n_jobs=5, prefer="threads")(
+            delayed(mapper_pipe[1].fit_transform)(data) for mapper_pipe in mapper_pipes
+        )
+    if log.level == logging.DEBUG:
+        print("------> exiting parallelization after {} seconds".format(elapsed()))
 
     fg = open(TEMP_DATA+"%s_firstsimplegap_graphs" % (label), "wb")
     pickle.dump(graphs, fg)

@@ -20,15 +20,80 @@
 
 import numpy as np
 import pandas as pd
-import sys, os
+import os
 
 IC_DATA_DIR = '../data/instacart_2017_05_01/'
 SMALL_IC_DATA_DIR = '../data/instacart_2017_05_01_small/'
 
-def get_instacart_OrderData(data_dir=IC_DATA_DIR):
-    order_data, product_data = instacart_process(data_dir=data_dir)
-    IC_order_data =  OrderData(order_data, product_data)
-    return IC_order_data
+AWS = True
+if AWS:
+    import boto3
+    from io import StringIO
+
+    client = boto3.client('s3')
+
+    bucket_name = 'bmwillett1'
+
+    IC_DATA_DIR_AWS = 'instacart/instacart_2017_05_01_small/'
+
+
+def getCSVs3(filename, ic_data_dir=IC_DATA_DIR_AWS):
+    object_key = ic_data_dir + filename
+    csv_obj = client.get_object(Bucket=bucket_name, Key=object_key)
+    body = csv_obj['Body']
+    csv_string = body.read().decode('utf-8')
+    return StringIO(csv_string)
+
+def instacart_process_AWS():
+    """
+    load and preprocess instacart dataset
+
+    :param data_dir: directory containing dataset
+    :return: order_data, product_data : Pandas DataFrames
+    """
+
+    # load create order_data
+    orders = pd.read_csv(getCSVs3('orders.csv'), dtype={
+        'order_id': np.int32,
+        'user_id': np.int32,
+        'order_number': np.int16},
+                         usecols=['order_id', 'user_id', 'order_number'])
+
+    priors = pd.read_csv(getCSVs3('order_products__prior.csv'), dtype={
+        'order_id': np.int32,
+        'product_id': np.uint16,
+        'add_to_cart_order': np.int16},
+                         usecols=['order_id', 'product_id', 'add_to_cart_order'])
+
+    train = pd.read_csv(getCSVs3('order_products__train.csv'), dtype={
+        'order_id': np.int32,
+        'product_id': np.uint16,
+        'add_to_cart_order': np.int16},
+                        usecols=['order_id', 'product_id', 'add_to_cart_order'])
+
+    orders.set_index('order_id', inplace=True)
+    order_data = priors.append(train)
+    order_data['user_id'] = order_data.order_id.map(orders.user_id)
+    order_data['order_number'] = order_data.order_id.map(orders.order_number)
+    order_data.drop(['order_id'], axis=1, inplace=True)
+    order_data = order_data[['user_id', 'order_number', 'add_to_cart_order', 'product_id']]
+
+    # load and create product_data
+    products = pd.read_csv(getCSVs3('products.csv'))
+    aisles = pd.read_csv(getCSVs3('aisles.csv')).set_index('aisle_id')
+    departments = pd.read_csv(getCSVs3('departments.csv')).set_index('department_id')
+
+    product_data = pd.DataFrame()
+    product_data['product_id'] = products['product_id']
+    product_data['feature1'] = products['product_name']
+    product_data['feature2'] = products.aisle_id
+    product_data['feature3'] = products.aisle_id.map(aisles.aisle)
+    product_data['feature4'] = products.department_id
+    product_data['feature5'] = products.department_id.map(departments.department)
+    product_data.set_index('product_id', inplace=True)
+
+    return order_data, product_data
+
 
 def instacart_process(data_dir=IC_DATA_DIR):
     """

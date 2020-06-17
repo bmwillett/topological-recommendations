@@ -62,6 +62,19 @@ class DataSet:
         if verbose > 0:
             print("created UserProductMatrix of size", self.UserProductMatrix.shape)
 
+    def get_prior_products(self):
+        prior_dataset, last_dataset = self.split()
+
+        prior_orders = prior_dataset.order_data[['user_id', 'product_id']].drop_duplicates().reset_index(drop=True)
+        last_dataset.order_data.set_index(['user_id', 'product_id'], inplace=True)
+
+        labels = []
+        for row in prior_orders.itertuples():
+            labels.append(int((row.user_id, row.product_id) in last_dataset.order_data.index))
+        labels = np.array(labels)
+
+        return prior_orders, labels
+
     def split(self, mode='last_order', reset_ids=False):
         """
         for mode == 'last_order':
@@ -106,3 +119,68 @@ class DataSet:
                 last_dataset.prod_idx = self.prod_idx
 
         return prior_dataset, last_dataset
+
+    def test_train_val_split(self, train_frac=0.7 , val_frac=0.2):
+        assert train_frac+val_frac<=1
+        # test_frac=1-train_frac-test_frac (not needed)
+
+        uids_shuffle = np.copy(self.user_ids)
+        np.random.shuffle(uids_shuffle)
+        num_uids = len(self.user_ids)
+        num_train, num_val = int(train_frac*num_uids), int(val_frac*num_uids)
+        train_uids, val_uids, test_uids = uids_shuffle[:num_train], uids_shuffle[num_train:num_train+num_val], uids_shuffle[num_train+num_val:]
+
+        train_order_data = self.order_data[self.order_data.user_id.isin(train_uids)].copy()
+        val_order_data = self.order_data[self.order_data.user_id.isin(val_uids)].copy()
+        test_order_data = self.order_data[self.order_data.user_id.isin(test_uids)].copy()
+
+        train_dataset = DataSet(order_data=train_order_data, product_data=self.product_data)
+        val_dataset = DataSet(order_data=val_order_data, product_data=self.product_data)
+        test_dataset = DataSet(order_data=test_order_data, product_data=self.product_data)
+
+        train_dataset.product_ids = self.product_ids
+        train_dataset.product_idx = self.prod_idx
+        val_dataset.product_ids = self.product_ids
+        val_dataset.product_idx = self.prod_idx
+        test_dataset.product_ids = self.product_ids
+        test_dataset.product_idx = self.prod_idx
+
+        return train_dataset, val_dataset, test_dataset
+
+
+    def make_adversarial(self, num_switches=1, reset_ids=False):
+
+        idxs = {uid: [] for uid in self.user_ids}
+
+        for i, row in enumerate(self.order_data.itertuples()):
+            uid = row.user_id
+            idxs[uid].append(i)
+
+        toswap = []
+        for uid in self.user_ids:
+            toswap += list(np.random.choice(idxs[uid], size=num_switches))
+
+        all_pids = self.order_data.product_id.unique() # do not use self.product_ids as this can be larger
+        new_pids = np.random.choice(all_pids, size=len(toswap))
+
+        pids = np.copy(self.order_data.product_id.values)
+
+        toswap = sorted(toswap)
+
+        for i, pid in zip(toswap, new_pids):
+            pids[i] = pid
+
+        new_order_data = self.order_data.copy()
+        new_order_data.product_id = pids
+
+        new_dataset = DataSet(order_data=new_order_data, product_data=self.product_data)
+
+        if not reset_ids:
+            new_dataset.user_ids = self.user_ids
+            new_dataset.user_idx = self.user_idx
+            new_dataset.product_ids = self.product_ids
+            new_dataset.prod_idx = self.prod_idx
+
+        return new_dataset
+
+
