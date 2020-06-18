@@ -1,17 +1,17 @@
 from mapper_tools import *
 import logging
-log = logging.getLogger("TP_logger")
+log = logging.getLogger("TR_logger")
 
 class MapperClassifier:
-    def __init__(self, n_components=1, NRNN=3):
+    def __init__(self, n_components=1, NRNN=3, remake=True):
         self.n_components = n_components
         self.NRNN = NRNN
+        self.remake = remake
 
     def fit(self, data, data_header):
         self.data, self.data_header = data, data_header
         if log.level==logging.DEBUG:
             print("fitting mapper...")
-
 
         # get n_copmonents-dimensional PCA projection of data
         if log.level == logging.DEBUG:
@@ -30,19 +30,19 @@ class MapperClassifier:
 
         return self.total_graphbinm
 
-    def _getLatentRep(self, remake=True):
-        self.rep = getLatentRep(self.n_components, self.data, remake=remake)
+    def _getLatentRep(self):
+        self.rep = getLatentRep(self.n_components, self.data, remake=self.remake)
 
-    def _runMapper(self, remake=True):
-        self.graphs, self.mapper_pipes = runMapper(self.n_components, self.data, self.rep, remake=remake)
+    def _runMapper(self):
+        self.graphs, self.mapper_pipes = runMapper(self.n_components, self.data, self.rep, remake=self.remake)
 
-    def _makeGraphBins(self, remake=True):
-        self.total_graphbinm, self.featlen, self.total_graphbin = makeGraphBins(self.n_components, self.data, self.data_header, self.graphs, remake=remake)
+    def _makeGraphBins(self):
+        self.total_graphbinm, self.featlen, self.total_graphbin = makeGraphBins(self.n_components, self.data, self.data_header, self.graphs, remake=self.remake)
 
-    def project(self, datatest, datatest_header, remake=True):
+    def project(self, datatest, datatest_header):
         if log.level == logging.DEBUG:
             print("--->projecting data to grapher bins...")
         self.total_test_rep = projectTestData(self.n_components, self.rep, self.data, datatest, datatest_header,
-                            self.graphs, self.mapper_pipes, self. total_graphbinm, self.featlen, self.NRNN, remake=remake)
+                            self.graphs, self.mapper_pipes, self. total_graphbinm, self.featlen, self.NRNN, remake=self.remake)
 
         return self.total_test_rep

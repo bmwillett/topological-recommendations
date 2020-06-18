@@ -9,7 +9,8 @@ from gtda.mapper import *
 import pickle
 from joblib import Parallel, delayed
 import logging
-log = logging.getLogger("TP_logger")
+import sys
+log = logging.getLogger("TR_logger")
 
 
 DATA_DIR_TRAIN = '../data/data_train_fashion_unnormalized/'
@@ -85,53 +86,56 @@ def loadMapperData(mode = 'train', data_dir_train = DATA_DIR_TRAIN, data_dir_tes
     return data_train, data_header_train, data_test, data_header_test
 
 def getLatentRep(n_components, data, remake=True):
-    label = "PCA%d" % (n_components)
-    if not remake and os.path.exists("%s_latent" % (label)):
-        frin = open(TEMP_DATA+"%s_latent" % (label), "rb")
-        rep = pickle.load( frin )
+    label = "PCA%d" % n_components
+    if not remake and os.path.exists("%s_latent" % label):
+        frin = open(TEMP_DATA+"%s_latent" % label, "rb")
+        rep = pickle.load(frin)
         return rep
 
+    if log.level == logging.DEBUG:
+        print("------> fitting PCA to data of shape {}...".format(data.shape))
     pca = MyPCA(n_components=n_components)
     pca.fit(data)
 
+
     rep = LatentRep([pca], label)
-    fr = open(TEMP_DATA+"%s_latent" % (label), "wb")
+    fr = open(TEMP_DATA+"%s_latent" % label, "wb")
     pickle.dump(rep, fr)
     fr.close()
 
     return rep
 
 def runMapper(n_components, data, rep, remake=True, verbose=0):
-    label = "PCA%d" % (n_components)
-    if not remake and os.path.exists("%s_firstsimplegap_graphs" % (label)):
-        fgin = open(TEMP_DATA+"%s_firstsimplegap_graphs" % (label), "rb")
+    label = "PCA%d" % n_components
+    if not remake and os.path.exists("%s_firstsimplegap_graphs" % label):
+        fgin = open(TEMP_DATA+"%s_firstsimplegap_graphs" % label, "rb")
         graphs = pickle.load(fgin)
 
-        fpin = open(TEMP_DATA+"%s_mapper_pipes" % (label), "rb")
+        fpin = open(TEMP_DATA+"%s_mapper_pipes" % label, "rb")
         mapper_pipes = pickle.load(fpin)
 
         return graphs, mapper_pipes
 
     clusterer = FirstSimpleGap()
     mapper_pipes = []
-    pca=rep.projectors[0]
+    pca = rep.projectors[0]
 
     if log.level == logging.DEBUG:
         print("------> creating projection components...")
     for k in range(n_components):
         if log.level == logging.DEBUG:
-            print("---------> on component {}/{}...".format(k+1,n_components))
-        proj = Projection(columns = k)
+            print("---------> on component {}/{}...".format(k+1, n_components))
+        proj = Projection(columns=k)
         filter_func = Pipeline(steps=[('pca', pca), ('proj', proj)])
         cover = OneDimensionalCover(n_intervals=10, overlap_frac=0.33)
         mapper_pipe = make_mapper_pipeline(scaler=None,
-                                       filter_func = filter_func,
-                                       cover=cover,
-                                       clusterer=clusterer,
-                                       verbose=verbose>0,
-                                       n_jobs = 1)
-        mapper_pipe.set_params(filter_func__proj__columns = k)
-        mapper_pipes.append( ("PCA%d" % (k+1), mapper_pipe ) )
+                                           filter_func=filter_func,
+                                           cover=cover,
+                                           clusterer=clusterer,
+                                           verbose=(verbose > 0),
+                                           n_jobs=1)
+        mapper_pipe.set_params(filter_func__proj__columns=k)
+        mapper_pipes.append(("PCA%d" % (k+1), mapper_pipe))
 
     # try parallelization
     if log.level == logging.DEBUG:
@@ -143,15 +147,16 @@ def runMapper(n_components, data, rep, remake=True, verbose=0):
     if log.level == logging.DEBUG:
         print("------> exiting parallelization after {} seconds".format(elapsed()))
 
-    fg = open(TEMP_DATA+"%s_firstsimplegap_graphs" % (label), "wb")
+    fg = open(TEMP_DATA+"%s_firstsimplegap_graphs" % label, "wb")
     pickle.dump(graphs, fg)
     fg.close()
 
-    fp = open(TEMP_DATA+"%s_mapper_pipes" % (label) , "wb")
+    fp = open(TEMP_DATA+"%s_mapper_pipes" % label, "wb")
     pickle.dump(mapper_pipes, fp)
     fp.close()
 
     return graphs, mapper_pipes
+
 
 def makeGraphBins(n_components, data, data_header, graphs, remake=True):
     # an algorithm for binarizing training points using
@@ -160,9 +165,9 @@ def makeGraphBins(n_components, data, data_header, graphs, remake=True):
     # points representations , used for training a
     # NeuralNet classifier in the next step.
 
-    label = "PCA%d" % (n_components)
-    if not remake and os.path.exists(TEMP_DATA+'matrix_train_%s.csv' % (label)):
-        total_graphbinm = np.loadtxt(TEMP_DATA+'matrix_train_%s.csv' % (label), delimiter=',',)
+    label = "PCA%d" % n_components
+    if not remake and os.path.exists(TEMP_DATA+'matrix_train_%s.csv' % label):
+        total_graphbinm = np.loadtxt(TEMP_DATA+'matrix_train_%s.csv' % label, delimiter=',', fmt='%f')
         return total_graphbinm
 
     total_graphbin = []
@@ -179,17 +184,17 @@ def makeGraphBins(n_components, data, data_header, graphs, remake=True):
             for pt in graph['node_metadata']['node_elements'][node]:
                 graphbin[pt][node] = 1
 
-        stamp = str(comp + 1)
         total_graphbin.append(graphbin)
         featlen += graphbin.shape[1]
 
     total_graphbinm = np.hstack(total_graphbin)
 
-    np.savetxt(TEMP_DATA+'matrix_train_%s.csv' % (label), total_graphbinm, delimiter=',', fmt='%f')
+    np.savetxt(TEMP_DATA+'matrix_train_%s.csv' % label, total_graphbinm, delimiter=',', fmt='%f')
 
     return total_graphbinm, featlen, graphbin
 
-def find_alphas(val, intervals, delta = 0.1):
+
+def find_alphas(val, intervals, delta=0.1):
     alphas = []
     if val < intervals[0][1]:
         return tuple([0])
@@ -203,9 +208,9 @@ def find_alphas(val, intervals, delta = 0.1):
 
 
 def projectTestData(n_components, rep, data, datatest, datatest_header, graphs, mapper_pipes, total_graphbinm, featlen, NRNN, remake=True):
-    label = "PCA%d" % (n_components)
-    if not remake and os.path.exists(TEMP_DATA+'matrix_test_%s.csv' % (label)):
-        total_test_rep = np.loadtxt(TEMP_DATA+'matrix_test_%s.csv' % (label), delimiter=',',)
+    label = "PCA%d" % n_components
+    if not remake and os.path.exists(TEMP_DATA+'matrix_test_%s.csv' % label):
+        total_test_rep = np.loadtxt(TEMP_DATA+'matrix_test_%s.csv' % label, delimiter=',', fmt='%f')
         return total_test_rep
 
     # # Mapper testing
@@ -233,23 +238,21 @@ def projectTestData(n_components, rep, data, datatest, datatest_header, graphs, 
     int_nn = {}
 
     # precompute dictionary of fitted NNeighbor for further use
-    # currently use only single component
-    # for n in range(len(intervals)):
-    n = 0
-    int_preim_int = []
-    for i in range(len(intervals[n])):
-        nodeids = graphs[n]['node_metadata']['node_elements'][i]
-        knn = NearestNeighbors(n_neighbors=NRNN, metric='euclidean')
-        knn.fit(data[nodeids])
-        int_preim_int.append(nodeids)
-        # knn is fitted knn using data[nodeids] subset of data nodeids are also saved to further reference them in the
-        # whole data
-        int_nn.update({(n, tuple([i])): [knn, data[nodeids], np.array(nodeids)]})
-        if (i > 0):
+    for n in range(len(intervals)):
+        int_preim_int = []
+        for i in range(len(intervals[n])):
+            nodeids = graphs[n]['node_metadata']['node_elements'][i]
             knn = NearestNeighbors(n_neighbors=NRNN, metric='euclidean')
-            union = list(set(nodeids) | set(int_preim_int[i - 1]))
-            knn.fit(data[union])
-            int_nn.update({(n, tuple([i - 1, i])): [knn, data[union], np.array(union)]})
+            knn.fit(data[nodeids])
+            int_preim_int.append(nodeids)
+            # knn is fitted knn using data[nodeids] subset of data nodeids are also saved to further reference them in the
+            # whole data
+            int_nn.update({(n, tuple([i])): [knn, data[nodeids], np.array(nodeids)]})
+            if (i > 0):
+                knn = NearestNeighbors(n_neighbors=NRNN, metric='euclidean')
+                union = list(set(nodeids) | set(int_preim_int[i - 1]))
+                knn.fit(data[union])
+                int_nn.update({(n, tuple([i - 1, i])): [knn, data[union], np.array(union)]})
 
     l = 0
     # for each testpoint compute its representation by finding its NNeighbor
@@ -294,7 +297,6 @@ def projectTestData(n_components, rep, data, datatest, datatest_header, graphs, 
     # ASSUMING BELOW, THAT SINGLE COMPONENT HAS BEEN COMPUTED
     # compute the weights for weighting the NN representations
 
-
     for i in range(len(nndists)):
         ns = nndists[i][0]
         ns = 1. / (ns + mu)
@@ -312,6 +314,6 @@ def projectTestData(n_components, rep, data, datatest, datatest_header, graphs, 
     else:
         total_test_rep = np.hstack([test_rep])
 
-    np.savetxt(TEMP_DATA+'matrix_test_%s.csv' % (label), total_test_rep, delimiter=',', fmt='%f')
+    np.savetxt(TEMP_DATA+'matrix_test_%s.csv' % label, total_test_rep, delimiter=',', fmt='%f')
 
     return total_test_rep

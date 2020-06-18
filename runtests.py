@@ -20,7 +20,15 @@ order_data, product_data = instacart_process(data_dir=IC_DATA_DIR)
 IC_dataset = DataSet(order_data, product_data)
 train_dataset, val_dataset, test_dataset = IC_dataset.test_train_val_split()
 
-test_adv = test_dataset.make_adversarial()
+# make adversarial tests
+test_adv = test_dataset.make_adversarial(num_switches=1)
+test_adv2 = test_dataset.make_adversarial(num_switches=5)
+
+
+
+
+
+
 
 
 # create and train baseline random model
@@ -31,6 +39,8 @@ print("random: t=",t)
 
 prec_r, rec_r, f1_r = rmodel.accuracy_test(test_dataset, threshold=t)
 prec_r_adv, rec_r_adv, f1_r_adv = rmodel.accuracy_test(test_adv, threshold=t)
+prec_r_adv2, rec_r_adv2, f1_r_adv2 = rmodel.accuracy_test(test_adv2, threshold=t)
+
 
 
 # create and train baseline LGBM model
@@ -41,53 +51,86 @@ print("lgmodel: t=",t)
 
 prec_lg, rec_lg, f1_lg = lgmodel.accuracy_test(test_dataset, threshold=t)
 prec_lg_adv, rec_lg_adv, f1_lg_adv = lgmodel.accuracy_test(test_adv, threshold=t)
+prec_lg_adv2, rec_lg_adv2, f1_lg_adv2 = lgmodel.accuracy_test(test_adv2, threshold=t)
 
 
-# # create and train baseline RandomForest model
-# rfmodel = RandomForestModel()
-# rfmodel.fit(train_dataset)
-# t = rfmodel.find_threshold(val_dataset)
-# print("rfmodel: t=",t)
+
+# TODO: not training in the correct format, fix later
+# # create and train baseline XGB model
+# xgmodel = XGBoostModel()
+# xgmodel.fit(train_dataset)
+# t = xgmodel.find_threshold(val_dataset)
+# print("xgmodel: t=",t)
 #
-# prec_rf, rec_rf, f1_rf = rfmodel.accuracy_test(test_dataset, threshold=t))
-# prec_rf_adv, rec_rf_adv, f1_rf_adv = rfmodel.accuracy_test(test_adv, threshold=t))
+# prec_xg, rec_xg, f1_xg = xgmodel.accuracy_test(test_dataset, threshold=t)
+# prec_xg_adv, rec_xg_adv, f1_xg_adv = xgmodel.accuracy_test(test_adv, threshold=t)
+#
 
 
-# create and train UP latent model
-upmodel = UPLModel()
-upmodel.fit(train_dataset,epochs=10)
-t = upmodel.find_threshold(val_dataset)
-print("upmodel: t=",t)
+# create and train baseline RandomForest model
+rfmodel = RandomForestModel()
+rfmodel.fit(train_dataset)
+t = rfmodel.find_threshold(val_dataset)
+print("rfmodel: t=",t)
 
-prec_nt, rec_nt, f1_nt = upmodel.accuracy_test(test_dataset, threshold=t)
-prec_nt_adv, rec_nt_adv, f1_nt_adv = upmodel.accuracy_test(test_adv, threshold=t)
+prec_rf, rec_rf, f1_rf = rfmodel.accuracy_test(test_dataset, threshold=t)
+prec_rf_adv, rec_rf_adv, f1_rf_adv = rfmodel.accuracy_test(test_adv, threshold=t)
+prec_rf_adv2, rec_rf_adv2, f1_rf_adv2 = rfmodel.accuracy_test(test_adv2, threshold=t)
 
-# create and train topological UP latent model
-tupmodel = TUPLModel(n_components=4)
-tupmodel.fit(train_dataset)
-t = tupmodel.find_threshold(val_dataset)
-print("tupmodel: t=",t)
-
-prec_t, rec_t, f1_t = tupmodel.accuracy_test(test_dataset, threshold=t)
-prec_t_adv, rec_t_adv, f1_t_adv = tupmodel.accuracy_test(test_adv, threshold=t)
+#
+#
+# # create and train UP latent model
+# upmodel = UPLModel(IC_dataset)
+# upmodel.fit(train_dataset, epochs=50)
+# t = upmodel.find_threshold(val_dataset)
+# print("upmodel: t=",t)
+#
+# prec_nt, rec_nt, f1_nt = upmodel.accuracy_test(test_dataset, threshold=t)
+# prec_nt_adv, rec_nt_adv, f1_nt_adv = upmodel.accuracy_test(test_adv, threshold=t)
+# prec_nt_adv2, rec_nt_adv2, f1_nt_adv2 = upmodel.accuracy_test(test_adv2, threshold=t)
+#
+#
+#
+# # create and train topological UP latent model
+# tupmodel = TUPLModel(IC_dataset, n_components=4)
+# tupmodel.fit(train_dataset, epochs=50)
+# t = tupmodel.find_threshold(val_dataset)
+# print("tupmodel: t=",t)
+#
+# prec_t, rec_t, f1_t = tupmodel.accuracy_test(test_dataset, threshold=t)
+# prec_t_adv, rec_t_adv, f1_t_adv = tupmodel.accuracy_test(test_adv, threshold=t)
+# prec_t_adv2, rec_t_adv2, f1_t_adv2 = tupmodel.accuracy_test(test_adv2, threshold=t)
+#
+#
+#
+#
 
 
 print("accuracy test for random model: prec = %f, rec = %f, f1 = %f" % (prec_r, rec_r, f1_r))
 print("robustness test for random model: prec = %f, rec = %f, f1 = %f" % (prec_r_adv, rec_r_adv, f1_r_adv))
+print("2nd robustness test for random model: prec = %f, rec = %f, f1 = %f" % (prec_r_adv2, rec_r_adv2, f1_r_adv2))
+
 
 print("accuracy test for LGBoost model: prec = %f, rec = %f, f1 = %f" % (prec_lg, rec_lg, f1_lg))
 print("robustness test for LGBoost model: prec = %f, rec = %f, f1 = %f" % (prec_lg_adv, rec_lg_adv, f1_lg_adv))
+print("2nd robustness test for LGBoost model: prec = %f, rec = %f, f1 = %f" % (prec_lg_adv2, rec_lg_adv2, f1_lg_adv2))
 
-# print("accuracy test for RandomForest model: prec = %f, rec = %f, f1 = %f" % (prec_rf, rec_rf, f1_rf))
-# print("robustness test for RandomForest model: prec = %f, rec = %f, f1 = %f" % (prec_rf_adv, rec_rf_adv, f1_rf_adv))
+# print("accuracy test for XGBoost model: prec = %f, rec = %f, f1 = %f" % (prec_xg, rec_xg, f1_xg))
+# print("robustness test for XGBoost model: prec = %f, rec = %f, f1 = %f" % (prec_xg_adv, rec_xg_adv, f1_xg_adv))
 
-print("accuracy test for UPL model: prec = %f, rec = %f, f1 = %f" % (prec_nt, rec_nt, f1_nt))
-print("robustness test for UPL model: prec = %f, rec = %f, f1 = %f" % (prec_nt_adv, rec_nt_adv, f1_nt_adv))
-
-print("accuracy test for topological model: prec = %f, rec = %f, f1 = %f" % (prec_t, rec_t, f1_t))
-print("robustness test for topological model: prec = %f, rec = %f, f1 = %f" % (prec_t_adv, rec_t_adv, f1_t_adv))
-
-
+print("accuracy test for RandomForest model: prec = %f, rec = %f, f1 = %f" % (prec_rf, rec_rf, f1_rf))
+print("robustness test for RandomForest model: prec = %f, rec = %f, f1 = %f" % (prec_rf_adv, rec_rf_adv, f1_rf_adv))
+print("2nd robustness test for RandomForest model: prec = %f, rec = %f, f1 = %f" % (prec_rf_adv2, rec_rf_adv2, f1_rf_adv2))
+#
+# print("accuracy test for UPL model: prec = %f, rec = %f, f1 = %f" % (prec_nt, rec_nt, f1_nt))
+# print("robustness test for UPL model: prec = %f, rec = %f, f1 = %f" % (prec_nt_adv, rec_nt_adv, f1_nt_adv))
+# print("robustness test for UPL model: prec = %f, rec = %f, f1 = %f" % (prec_nt_adv2, rec_nt_adv2, f1_nt_adv2))
+#
+# print("accuracy test for topological model: prec = %f, rec = %f, f1 = %f" % (prec_t, rec_t, f1_t))
+# print("robustness test for topological model: prec = %f, rec = %f, f1 = %f" % (prec_t_adv, rec_t_adv, f1_t_adv))
+# print("2nd robustness test for topological model: prec = %f, rec = %f, f1 = %f" % (prec_t_adv2, rec_t_adv2, f1_t_adv2))
+#
+#
 
 
 

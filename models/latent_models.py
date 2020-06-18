@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 import gensim
+import sys
+sys.path.append('./lib')
+sys.path.append('./models')
 
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
@@ -9,6 +12,8 @@ from tools import *
 from sklearn.cluster import KMeans
 from sklearn import metrics
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD, PCA
+from sklearn.neighbors import NearestNeighbors
 
 from keras.layers import Input, Dense
 from keras.models import Model
@@ -27,41 +32,91 @@ class LatentModel:
     def fit(self, train_dataset):
         pass
 
+    def plot(self, dataset, group_size=4, num_groups=3):
+
+        product_ids = dataset.product_ids
+        num_pids = len(product_ids)
+
+        X = self.encode(product_ids)
+        pca = PCA(n_components=2)
+        pca.fit(X)
+
+        neigh = NearestNeighbors(n_neighbors=group_size, radius=0.4)
+        neigh.fit(X)
+
+        labels = []
+        embeds = []
+        i = 0
+        while i < num_groups:
+            pid = np.random.randint(num_pids)
+            if X[pid, 0] == 0:
+                continue
+            closest = neigh.kneighbors([X[pid, :]])[1][0, :]
+            new_embeds = X[closest]
+
+            new_labels = dataset.product_data.feature1.iloc[closest].values
+            labels += list(new_labels)
+            embeds += list(new_embeds)
+            i += 1
+
+        low_dim_embs = pca.transform(np.array(embeds))
+
+        plt.figure(figsize=(10, 10))  # in inches
+        texts = []
+        for i, label in enumerate(labels):
+            x, y = low_dim_embs[i, :]
+            plt.scatter(x, y)
+            texts.append(plt.text(x, y, label, size=12))
+            # xytext=(5, 2),
+            # textcoords='offset points',
+            # ha='right',
+            # va='bottom',
+            # size=15))
+
+        #     plt.savefig(filename)
+        adjust_text(texts, arrowprops=dict(arrowstyle="->", color='r', lw=0.5))
+        plt.show()
+
 class ProductLatent(LatentModel):
-    def __init__(self, encoding_dim=100, order_data=None, product_data=None, retrain=False, data_dir= './data/instacart_2017_05_01/', model_dir= './models/', verbose=0, plot=False):
-        if verbose > 0:
-            print("loading data...")
+    def __init__(self, n_components=10):
+        self.w2v = word2vecModel()
+        self.tfidf = TFIDFModel()
+        self.n_components = n_components
 
+    def fit(self, dataset):
+        self.w2v.fit(dataset)
+        self.tfidf.fit(dataset)
+
+        product_ids = dataset.product_ids
+        X1 = self.w2v.encode(product_ids)
+        X2 = self.tfidf.encode(product_ids)
+
+        X = np.concatenate([X1,X2],axis=1)
+
+        self.pcamodel = PCA(n_components=self.n_components)
+        self.pcamodel.fit(X)
+
+
+    def encode(self, product_ids):
+        X1 = self.w2v.encode(product_ids)
+        X2 = self.tfidf.encode(product_ids)
+        X = np.concatenate([X1, X2],axis=1)
+        return self.pcamodel.transform(X)
+
+
+class word2vecModel(LatentModel):
+    def __init__(self, encoding_dim=100, retrain=False, model_dir= './models/'):
         self.encoding_dim = encoding_dim
+        self.model = None
+        self.retrain = retrain
+        self.model_dir = model_dir
 
-        retrain = retrain or not os.path.isfile(model_dir + 'product2vec.model')
+    def fit(self,dataset):
+        retrain = self.retrain or not os.path.isfile(self.model_dir + 'product2vec.model')
 
-        train_orders = pd.read_csv(data_dir+"order_products__train.csv") if retrain else None
-        prior_orders = pd.read_csv(data_dir+"order_products__prior.csv") if retrain else None
-        products = pd.read_csv(data_dir+"products.csv").set_index('product_id')
-
-        if verbose>0:
-            print("getting model...")
-        self.model = get_word2vec_model(train_orders, prior_orders, products, size=encoding_dim, retrain=retrain)
+        self.model = get_word2vec_model(dataset.order_data, size=self.encoding_dim, retrain=retrain, model_dir=self.model_dir)
 
 #        self.vocab = list(self.model.wv.vocab.keys())
-
-        if plot:
-            print("fitting pca...")
-            pca = PCA(n_components=2)
-            pca.fit(self.model.wv.syn0)
-
-
-            print("plotting sample...")
-            embeds = []
-            labels = []
-            for item in get_batch(vocab, model, n_batches=3):
-                embeds.append(self.model[item])
-                labels.append(products.loc[int(item)]['product_name'])
-            embeds = np.array(embeds)
-            embeds = pca.fit_transform(embeds)
-            plot_with_labels(embeds, labels)
-
 
     def encode(self, product_ids):
         X_enc = []
@@ -74,6 +129,33 @@ class ProductLatent(LatentModel):
         return np.array(X_enc)
 
 
+class TFIDFModel(LatentModel):
+    def __init__(self):
+        pass
+
+    def fit(self, dataset, n_components=20):
+        self.dataset=dataset
+
+        comb_frame = dataset.product_data.feature1.str.cat(" " + dataset.product_data.feature3.str.cat(" " + dataset.product_data.feature5))
+        comb_frame = comb_frame.replace({"[^A-Za-z0-9 ]+": ""}, regex=True)
+        comb_frame.head()
+        self.vectorizer = TfidfVectorizer(stop_words='english')
+        self.vectorizer.fit(comb_frame)
+
+        X = self.vectorizer.transform(comb_frame)
+
+        self.tsvd = TruncatedSVD(n_components=n_components)
+        self.tsvd.fit(X)
+
+    def encode(self, product_ids):
+        df = self.dataset.product_data.loc[product_ids]
+
+        comb_frame = df.feature1.str.cat(" " + df.feature3.str.cat(" " + df.feature5))
+        comb_frame = comb_frame.replace({"[^A-Za-z0-9 ]+": ""}, regex=True)
+        comb_frame.head()
+        X_test = self.vectorizer.transform(comb_frame)
+
+        return self.tsvd.transform(X_test)
 
 
 class UserLatentAEM(LatentModel):
@@ -81,7 +163,7 @@ class UserLatentAEM(LatentModel):
         self.input_dim = input_dim
         self.encoding_dim = encoding_dim
 
-    def fit(self, train_dataset, epochs=5, batch_size=25):
+    def fit(self, train_dataset, epochs=50, batch_size=25):
 
         self.input_dim = len(train_dataset.product_ids)
         input_dim = self.input_dim
