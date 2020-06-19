@@ -31,18 +31,19 @@ class BaseModel:
 
         user_true = {}
         user_pred = {}
+        user_pred_values = {}
         for i,row in enumerate(prior_orders.itertuples()):
             uid = row.user_id
             pid = row.product_id
             if uid not in user_true:
-                user_true[uid], user_pred[uid] = [], []
+                user_true[uid], user_pred[uid], user_pred_values[uid]  = [], [], {}
+            user_pred_values[uid][pid] = preds[i]
             if test_labels[i] == 1:
                 user_true[uid].append(pid)
             if preds[i] > threshold:
                 user_pred[uid].append(pid)
 
-        # TODO: add DCG if applicable
-        precs, recs, f1s = [], [], []
+        precs, recs, f1s, ndcgs = [], [], [], []
         for uid in user_true:
             trues = set(user_true[uid])
             preds = set(user_pred[uid])
@@ -59,4 +60,9 @@ class BaseModel:
             recs.append(rec)
             f1s.append(f1)
 
-        self.prec, self.rec, self.f1 = np.mean(precs), np.mean(recs), np.mean(f1s)
+            # compute dcg
+            ordered_preds = sorted((-user_pred_values[uid][pid], pid) for pid in user_pred_values[uid])
+            pred_rank = {x[1]: i for i, x in enumerate(ordered_preds)}  # gives predicted rank of ith product
+            ndcgs.append(sum([1/np.log(pred_rank[pid]+2) for pid in trues])/sum([1/np.log(i+2) for i in range(len(trues))])) if len(trues)>0 else 1
+
+        self.prec, self.rec, self.f1, self.ndcg = np.mean(precs), np.mean(recs), np.mean(f1s), np.mean(ndcgs)

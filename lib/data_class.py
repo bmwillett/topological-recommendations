@@ -147,7 +147,6 @@ class DataSet:
 
         return train_dataset, val_dataset, test_dataset
 
-
     def make_adversarial(self, num_switches=1, reset_ids=False):
 
         idxs = {uid: [] for uid in self.user_ids}

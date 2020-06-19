@@ -77,21 +77,31 @@ class LatentModel:
         adjust_text(texts, arrowprops=dict(arrowstyle="->", color='r', lw=0.5))
         plt.show()
 
-class ProductLatent(LatentModel):
+class EmptyLatentModel(LatentModel):
+    def __init__(self):
+        pass
+
+    def fit(self, *args):
+        pass
+
+    def encode(self, dataset, *args):
+        return np.empty(shape=(dataset.shape[0],0))
+
+class HybridProductLatentModel(LatentModel):
     def __init__(self, n_components=10):
         self.w2v = word2vecModel()
         self.tfidf = TFIDFModel()
         self.n_components = n_components
 
-    def fit(self, dataset):
-        self.w2v.fit(dataset)
-        self.tfidf.fit(dataset)
+    def fit(self, dataset, verbose=1):
+        self.w2v.fit(dataset, verbose=verbose)
+        self.tfidf.fit(dataset, verbose=verbose)
 
         product_ids = dataset.product_ids
         X1 = self.w2v.encode(product_ids)
         X2 = self.tfidf.encode(product_ids)
 
-        X = np.concatenate([X1,X2],axis=1)
+        X = np.concatenate([X1, X2], axis=1)
 
         self.pcamodel = PCA(n_components=self.n_components)
         self.pcamodel.fit(X)
@@ -100,7 +110,7 @@ class ProductLatent(LatentModel):
     def encode(self, product_ids):
         X1 = self.w2v.encode(product_ids)
         X2 = self.tfidf.encode(product_ids)
-        X = np.concatenate([X1, X2],axis=1)
+        X = np.concatenate([X1, X2], axis=1)
         return self.pcamodel.transform(X)
 
 
@@ -111,12 +121,10 @@ class word2vecModel(LatentModel):
         self.retrain = retrain
         self.model_dir = model_dir
 
-    def fit(self,dataset):
+    def fit(self, dataset, verbose=1):
         retrain = self.retrain or not os.path.isfile(self.model_dir + 'product2vec.model')
 
-        self.model = get_word2vec_model(dataset.order_data, size=self.encoding_dim, retrain=retrain, model_dir=self.model_dir)
-
-#        self.vocab = list(self.model.wv.vocab.keys())
+        self.model = get_word2vec_model(dataset.order_data, size=self.encoding_dim, retrain=retrain, model_dir=self.model_dir, verbose=verbose)
 
     def encode(self, product_ids):
         X_enc = []
@@ -133,17 +141,23 @@ class TFIDFModel(LatentModel):
     def __init__(self):
         pass
 
-    def fit(self, dataset, n_components=20):
+    def fit(self, dataset, n_components=20, verbose=1):
         self.dataset=dataset
 
+        if verbose>0:
+            print("extracting text data from dataset...")
         comb_frame = dataset.product_data.feature1.str.cat(" " + dataset.product_data.feature3.str.cat(" " + dataset.product_data.feature5))
         comb_frame = comb_frame.replace({"[^A-Za-z0-9 ]+": ""}, regex=True)
         comb_frame.head()
         self.vectorizer = TfidfVectorizer(stop_words='english')
         self.vectorizer.fit(comb_frame)
 
+        if verbose>0:
+            print("fitting TF-IDF vectorizier...")
         X = self.vectorizer.transform(comb_frame)
 
+        if verbose>0:
+            print("fitting SVD...")
         self.tsvd = TruncatedSVD(n_components=n_components)
         self.tsvd.fit(X)
 
@@ -158,44 +172,45 @@ class TFIDFModel(LatentModel):
         return self.tsvd.transform(X_test)
 
 
-class UserLatentAEM(LatentModel):
-    def __init__(self, input_dim=0, encoding_dim=32):
-        self.input_dim = input_dim
+class UserAEM(LatentModel):
+    def __init__(self, encoding_dim=32):
+        self.input_dim = 0
         self.encoding_dim = encoding_dim
 
-    def fit(self, train_dataset, epochs=50, batch_size=25):
+        self.autoencoder, self.encoder, self.decoder = None, None, None
+
+    def fit(self, train_dataset, epochs=50, batch_size=32, verbose=1):
 
         self.input_dim = len(train_dataset.product_ids)
-        input_dim = self.input_dim
-        encoding_dim = self.encoding_dim
 
-        input = Input(shape=(input_dim,))
+        input = Input(shape=(self.input_dim,))
 
-        encoded = Dense(encoding_dim, activation='relu')(input)
-        decoded = Dense(input_dim, activation='sigmoid')(encoded)
+        encoded = Dense(self.encoding_dim, activation='relu')(input)
+        decoded = Dense(self.input_dim, activation='sigmoid')(encoded)
 
         self.autoencoder = Model(input, decoded)
         self.encoder = Model(input, encoded)
 
-        encoded_input = Input(shape=(encoding_dim,))
+        encoded_input = Input(shape=(self.encoding_dim,))
         decoder_layer = self.autoencoder.layers[-1]
         self.decoder = Model(encoded_input, decoder_layer(encoded_input))
 
+        # TODO: way to use product latent space in encoding?
         self.autoencoder.compile(optimizer='adadelta', loss=nonzero_loss)
 
-
         X_train = train_dataset.get_user_product_matrix()
-        self.train_dataset=train_dataset
+        #self.train_dataset = train_dataset
 
         self.autoencoder.fit(X_train, X_train,
                              epochs=epochs,
                              batch_size=batch_size,
-                             shuffle=True)
+                             shuffle=True,
+                             verbose=verbose)
 
-    def encode(self, dataset, user_ids):
+    def encode(self, user_ids, dataset):
         X = dataset.get_user_product_matrix()
         ids = tuple([dataset.user_idx[uid] for uid in user_ids])
-        X_to_enc = X[ids,:]
+        X_to_enc = X[ids, :]
         encoded_users = self.encoder.predict(X_to_enc)
 
         return encoded_users

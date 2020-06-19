@@ -1,3 +1,6 @@
+import sys
+sys.path.append('./lib')
+
 from mapper_tools import *
 import logging
 log = logging.getLogger("TR_logger")
@@ -40,7 +43,7 @@ class MapperClassifier:
         self.total_graphbinm, self.featlen, self.total_graphbin = makeGraphBins(self.n_components, self.data, self.data_header, self.graphs, remake=self.remake)
 
     def project(self, datatest, datatest_header):
-        if log.level == logging.DEBUG:
+        if log.level == logging.DEBUG and False:
             print("--->projecting data to grapher bins...")
         self.total_test_rep = projectTestData(self.n_components, self.rep, self.data, datatest, datatest_header,
                             self.graphs, self.mapper_pipes, self. total_graphbinm, self.featlen, self.NRNN, remake=self.remake)
