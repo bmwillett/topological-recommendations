@@ -181,5 +181,3 @@ class DataSet:
             new_dataset.prod_idx = self.prod_idx
 
         return new_dataset
-
-
