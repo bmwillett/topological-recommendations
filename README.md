@@ -10,13 +10,44 @@ The author of the package is Brian Willett (bmwillett1 at gmail).
 
 ## DIRECTORY STRUCTURE
 
-- To be added
+```console
+├── README.md 
+├── requirements.txt
+├── data
+│   ├── instacart_small - small version of instacart dataset for running tests
+├── lib
+│   ├── data_class.py - class for product datasets
+│   ├── mapper_class.py - Mapper-based classifier algorithm
+│   ├── process_data.py - helper methods for loading data
+│   └── tools.py - general helper methods
+├── models
+│   ├── base_model.py - base class for all models
+│   ├── baseline_models.py - standard algorithms for baseline comparison
+│   ├── latent_models.py - models to encode user/products in latent space, used for topological embeddinng
+│   └── main_models.py - main models incorporating mapper-based classifier
+└── tests
+    ├── model_test.py - runs simple tests of models
+    └── test_notebook.ipynb
+```
 
 ## SETUP
 
-- To be added
-        
+To install top-choice package:
 
+- In the command line, run:
+```console
+pip install top-choice
+```
+
+- To run tests in this repo:
+
+```console
+git clone https://github.com/bmwillett/topological-recommendations
+pip install -r requirements.txt
+python tests/runtests.py
+```
+
+## DESCRIPTION
 
 
 
