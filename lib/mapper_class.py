@@ -11,6 +11,18 @@ from timeit import default_timer
 
 TEMP_DATA = './temp_data/'
 
+"""
+Main class and methods for "Mapper-based classifier" algorithm of:
+
+Mapper Based Classifier
+Jacek Cyranka, Alexander Georges, David Meyer
+arxiv:1910.08103
+
+Thanks to Alexander Georges and Jacek Cyranka for helpful discussions, and especially to Jacek Cyranka for 
+sharing a Jupyter notebook implementation of the algorithm on which much of the code below is based
+
+"""
+
 class MapperClassifier:
     def __init__(self, n_components=1, NRNN=3, remake=True, n_intervals=10, overlap_frac=0.33, delta=0.1, verbose=0):
         self.n_components = n_components
@@ -114,12 +126,15 @@ class MapperClassifier:
         fp.close()
 
     def _makeGraphBins(self):
-        # an algorithm for binarizing training points using
-        # the computed graph representation
-        # computes and outputs a CSV file with all training
-        # points representations , used for training a
-        # NeuralNet classifier in the next step.
-
+        """
+        transforms training points into bins according to which nodes
+        of the mapper graphs they lie in.  result is a binary vector of shape
+        
+        (self.data_len, self.mapper_features)
+        
+        which is placed in self.total_graphbinm
+        """
+        
         if not self.remake and os.path.exists(TEMP_DATA + 'matrix_train_%s.csv' % self.label):
             self.total_graphbinm = np.loadtxt(TEMP_DATA + 'matrix_train_%s.csv' % self.label, delimiter=',', fmt='%f')
             return
@@ -162,8 +177,7 @@ class MapperClassifier:
         # project the test data
         latent_test_data = self.rep.transform(test_data)
 
-        # for each test data, translate its latent representation
-        # into interval nrs
+        # for each test data, translate its latent representation into interval nrs
         intervals = []
         for mapper_pipe in self.mapper_pipes:
             intervals.append(mapper_pipe[1].get_mapper_params()['cover'].get_fitted_intervals())
@@ -187,11 +201,9 @@ class MapperClassifier:
                 alphas.append(find_alphas(latentv, intervals[n]))
             fullalphas.append(alphas)
 
-        # seach for NNeighbor in the preimage of intervals
-        # precompute NNeighbor for preimage of each interval
+        # precompute dictionary of fitted NNeighbor for future use
         int_nn = {}
 
-        # precompute dictionary of fitted NNeighbor for further use
         for n in range(self.n_components):
             int_preim_int = []
             nodeids = [[] for _ in range(len(intervals[n]))]
@@ -220,8 +232,6 @@ class MapperClassifier:
             nncompids = []
             nncompdists = []
             for j in range(self.n_components):
-                # compute this for only the first component (computing for all components is prohibitive)
-                # compute knn with distances for each test point (search in the preimage of j-th component)
                 inn = int_nn.get((j, fullalphas[i][j]))
                 if (len(inn[2]) > self.NRNN):
                     knn = inn[0].kneighbors([test_data[i]])
