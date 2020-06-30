@@ -1,3 +1,15 @@
+"""
+Main class and methods for "Mapper-based classifier" algorithm of:
+
+Mapper Based Classifier
+Jacek Cyranka, Alexander Georges, David Meyer
+arxiv:1910.08103
+
+Thanks to Alexander Georges and Jacek Cyranka for helpful discussions, and especially to Jacek Cyranka for
+sharing a Jupyter notebook implementation of the algorithm on which much of the code below is based
+
+"""
+
 import numpy as np
 import sklearn
 import os
@@ -6,71 +18,79 @@ from sklearn.pipeline import Pipeline
 from gtda.mapper import FirstSimpleGap, Projection, OneDimensionalCover, make_mapper_pipeline
 import pickle
 from joblib import Parallel, delayed
-from contextlib import contextmanager
-from timeit import default_timer
+import pathlib
+import logging
 
-TEMP_DATA = './temp_data/'
+log = logging.getLogger("TR_logger")
 
-"""
-Main class and methods for "Mapper-based classifier" algorithm of:
+TEMP_DATA = str(pathlib.Path(__file__).parent.parent.joinpath('./temp_data/').absolute())
 
-Mapper Based Classifier
-Jacek Cyranka, Alexander Georges, David Meyer
-arxiv:1910.08103
-
-Thanks to Alexander Georges and Jacek Cyranka for helpful discussions, and especially to Jacek Cyranka for 
-sharing a Jupyter notebook implementation of the algorithm on which much of the code below is based
-
-"""
 
 class MapperClassifier:
-    def __init__(self, n_components=1, NRNN=3, remake=True, n_intervals=10, overlap_frac=0.33, delta=0.1, verbose=0):
+    """
+    Implements topological encoding portion of mapper classifier algorithm
+    To complete mapper classifier algorithm, should train output on ordinary neural network
+
+    n_components: number of component PCA projection used on input data
+    NRNN: number of nearest neighbors to use whenn projecting test points to clusters
+    n_intervals: number of intervals used in constructing mapper graphs
+    overlap_frac: overlap of intervals
+    delta: parameter increasing effective size of intervals when projecting test points
+    mu: parameter used in weighing train points when projecting test data
+    """
+    def __init__(self, n_components=1, NRNN=3, remake=True, n_intervals=10, overlap_frac=0.33, delta=0.1, mu = 1e-05):
+        log.debug("creating mapper-classifier...")
         self.n_components = n_components
         self.NRNN = NRNN
         self.remake = remake
         self.n_intervals = n_intervals
         self.overlap_frac = overlap_frac
         self.delta = delta
-        self.verbose = verbose
+        self.mu = mu
         self.label = "PCA%d" % self.n_components
         self.data = None
 
-    def fit(self, data):
-        if len(data.shape)>2 and self.verbose>0:
-            print("flattening data...")
-        self.data = np.reshape(data, (data.shape[0],-1))
+    def fit_transform(self, data):
+        """
+        constructs mapper graphs using train data and uses to transform training points to encoded space
+
+        :param data: numpy array whose rows are training datapoints to fit to mapper-classifier
+        :return: None
+        """
+        if len(data.shape)>2:
+            log.debug("flattening data...")
+        self.data = np.reshape(data, (data.shape[0], -1))
         self.data_len, self.data_features = self.data.shape
 
-        if self.verbose>0:
-            print("fitting mapper...")
+        log.debug("fitting mapper...")
 
         # get (n_components)-dimensional PCA projection of data
-        if self.verbose>0:
-            print("--->getting latent space rep...")
+        log.debug("--->getting latent space rep...")
         self._getLatentRep()
 
         # create mapper graphs
-        if self.verbose>0:
-            print("--->creating mapper graphs...")
+        log.debug("--->creating mapper graphs...")
 
         self._runMapper()
 
         # assign train points to graph node bins
-        if self.verbose>0:
-            print("--->assigning train points to graph node bins...")
+        log.debug("--->assigning train points to graph node bins...")
         self._makeGraphBins()
 
         return self.total_graphbinm
 
     def _getLatentRep(self):
+        """
+        gets latent space (PCA) representation of train data
 
+        :return: None
+        """
         if not self.remake and os.path.exists("%s_latent" % self.label):
             frin = open(TEMP_DATA + "%s_latent" % self.label, "rb")
             self.rep = pickle.load(frin)
             return
 
-        if self.verbose>0:
-            print("------> fitting {}-component PCA to data of shape {}...".format(self.n_components, self.data.shape))
+        log.debug("------> fitting {}-component PCA to data of shape {}...".format(self.n_components, self.data.shape))
         pca = MyPCA(n_components=self.n_components)
         pca.fit(self.data)
 
@@ -80,6 +100,11 @@ class MapperClassifier:
         fr.close()
 
     def _runMapper(self):
+        """
+        creates mapper graphs based on train data
+
+        :return: None
+        """
         if not self.remake and os.path.exists("%s_firstsimplegap_graphs" % self.label):
             fgin = open(TEMP_DATA + "%s_firstsimplegap_graphs" % self.label, "rb")
             self.graphs = pickle.load(fgin)
@@ -92,12 +117,10 @@ class MapperClassifier:
         self.mapper_pipes = []
         pca = self.rep
 
-        if self.verbose>0:
-            print("------> creating projection components...")
+        log.debug("------> creating projection components...")
 
         for k in range(self.n_components):
-            if self.verbose>0:
-                print("---------> on component {}/{}...".format(k + 1, self.n_components))
+            log.debug("---------> on component {}/{}...".format(k + 1, self.n_components))
             proj = Projection(columns=k)
             filter_func = Pipeline(steps=[('pca', pca), ('proj', proj)])
             cover = OneDimensionalCover(n_intervals=self.n_intervals, overlap_frac=self.overlap_frac)
@@ -105,14 +128,13 @@ class MapperClassifier:
                                                filter_func=filter_func,
                                                cover=cover,
                                                clusterer=clusterer,
-                                               verbose=(self.verbose > 0),
+                                               verbose=(log.getEffectiveLevel()==logging.DEBUG),
                                                n_jobs=1)
             mapper_pipe.set_params(filter_func__proj__columns=k)
             self.mapper_pipes.append(("PCA%d" % (k + 1), mapper_pipe))
 
         # try parallelization
-        if self.verbose>0:
-            print("------> entering parallelization...")
+        log.debug("------> entering parallelization...")
         self.graphs = Parallel(n_jobs=5, prefer="threads")(
             delayed(mapper_pipe[1].fit_transform)(self.data) for mapper_pipe in self.mapper_pipes
         )
@@ -157,12 +179,18 @@ class MapperClassifier:
 
         np.savetxt(TEMP_DATA + 'matrix_train_%s.csv' % self.label, self.total_graphbinm, delimiter=',', fmt='%f')
 
-    def project(self, test_data_):
-        if self.verbose>0:
-            print("--->projecting data to grapher bins...")
+    def transform(self, test_data_):
+        """
+        transforms test data points to mapper representation
+        assumes fit_transform has already been called on training dataset
 
-        if len(test_data_.shape) > 2 and self.verbose > 0:
-            print("flattening data...")
+        :param test_data_: data to be transformed
+        :return: transformed test points
+        """
+        log.debug("--->projecting data to grapher bins...")
+
+        if len(test_data_.shape) > 2:
+            log.debug("flattening data...")
         test_data = np.reshape(test_data_, (test_data_.shape[0], -1))
 
 
@@ -204,6 +232,7 @@ class MapperClassifier:
         # precompute dictionary of fitted NNeighbor for future use
         int_nn = {}
 
+
         for n in range(self.n_components):
             int_preim_int = []
             nodeids = [[] for _ in range(len(intervals[n]))]
@@ -211,6 +240,8 @@ class MapperClassifier:
                 nodeids[x].append(self.graphs[n]['node_metadata']['node_elements'][i])
             for i in range(len(intervals[n])):
                 #nodeids = self.graphs[n]['node_metadata']['node_elements'][i]
+                if len(nodeids[i])==0:
+                    continue
                 nodeidsf = np.concatenate(nodeids[i])
                 knn = NearestNeighbors(n_neighbors=self.NRNN, metric='euclidean')
                 knn.fit(self.data[nodeidsf])
@@ -225,7 +256,7 @@ class MapperClassifier:
                     int_nn.update({(n, tuple([i - 1, i])): [knn, self.data[union], np.array(union)]})
 
         # for each test point compute its representation by finding its NNeighbor
-        mu = 1e-05
+
         test_rep = np.zeros((test_data_len, self.mapper_features))
 
         for i in range(test_data_len):
@@ -251,7 +282,7 @@ class MapperClassifier:
             best_dists = all_dists[sort_idx]
 
             ns = np.array(best_dists[:])
-            ns = 1. / (ns + mu)
+            ns = 1. / (ns + self.mu)
             ns = ns / sum(ns)
             features = ns.reshape(1, -1).dot(self.total_graphbinm[best_ids].astype(float)).squeeze()
             test_rep[i] = features
@@ -281,3 +312,25 @@ class LatentRep():
             rep.append(proj.transform(X))
         # merge all projectors into one vector
         return np.hstack(rep)
+
+
+# TESTING
+
+def run_tests():
+    # set random seed for consistent tests
+    np.random.seed(42)
+
+    mapper = MapperClassifier()
+    X_train = np.random.rand(200, 100)
+    X_train_map = mapper.fit_transform(X_train)
+    assert X_train_map.shape == (200, 285)
+    X_test = np.random.rand(100, 100)
+    X_test_map = mapper.transform(X_test)
+    assert X_test_map.shape == (100, 285)
+
+    log.info("mapper_class tests passed!")
+
+if __name__ == '__main__':
+    logging.basicConfig()
+    log.setLevel(logging.DEBUG)
+    run_tests()

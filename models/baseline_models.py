@@ -1,12 +1,8 @@
-import sys
-sys.path.append('./lib')
-
-from tools import *
+from lib.tools import *
 import lightgbm as lgb
-import xgboost as xgb
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestRegressor
-from base_model import BaseModel
+from models.base_model import BaseModel
 import pandas as pd
 import numpy as np
 import pickle
