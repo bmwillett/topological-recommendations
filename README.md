@@ -3,9 +3,19 @@
 
 ## INTRODUCTION
 
+Ever misclick on an ad, only to receive similar ads again and again? Or 
+maybe your friend asks you to order him some junk food on your 
+online grocery account, where you normally only order healthy foods, 
+and now you are served bad recommendations?  Product recommendation systems
+can be oversensitive to outlier orders, which we can think of as noise in the
+data the system uses to find user preferences.  This can lead to user frustration.
+
+My goal is to develop a product recommendation system which more robust to these outliers.  My approach is based on [topological 
+data analysis.](https://en.wikipedia.org/wiki/Topological_data_analysis)
+
 The author of the repo is Brian Willett (bmwillett1 at gmail).
 
-## DESCRIPTION
+## BACKGROUND
 
 A product recommendation system is an algorithm which determines for each user a set
 of products or services which they would like to purchase or interact with.  Typically these
@@ -16,9 +26,7 @@ modern approaches often use neural networks and deep learning techniques to
 achieve impressive accuracy.
 
 A potential pitfall of these techniques occurs when a user has some behavior that
-lies outside their normal preferences.  For example, a friend may watch a
-video on your streaming account, or you may misclick on an advertisement you were not really 
-interested in.  The recommendation system may then be led to suggest products based on 
+lies outside their normal preferences.  The recommendation system may then be led to suggest products based on 
 this behavior that are not desired by the user.  These outliers can be interpreted as 
 "noise" in the user-product dataset, and it is desirable for the recommendation algorithm to 
 be somewhat robust against this noise.
@@ -31,12 +39,14 @@ which uses the concept of a Mapper graph from TDA to achieve improved robustness
  
 In this repo we implement some models with and without the MCA to evaluate
 the performance of the recommendation systems in the presence of noise.  Concretely, we will
-focus on the Instacart dataset used in a Kaggle challenge from a few years ago.  Our task will be
+focus on the [Instacart dataset](https://www.instacart.com/datasets/grocery-shopping-2017).  Our task will be
 to predict what products a user reorders given their previous orders.
 
 ## MODELS
 
 ### Main models
+
+![Models](data/models.png)
 
 We develop models in a modular fashion by first creating the following components:
 
@@ -50,7 +60,7 @@ in product names
 - **Feature model:** directly extract features from the order data.  Here we extract features
 such as total product orders across all users, average position in cart, and so on.
 
-From these models, we assemble our two main models;
+From these models, we assemble our two main models:
 
 - **Model A:** We concatenate the outputs of the three models above and
 feed the result into a dense neural network.  In our case, the network
@@ -60,15 +70,16 @@ product pair whether the user will purchase that product in their next order
 - **Model B:** Similar to Model A, except after concatenating the
 models, we also feed the result into the mapper-classifier algorithm
 to obtain additional topological features.  The result is also fed into
-a dense neural network
+a dense neural network.
 
 ### Baseline models:
 
-As baseline models for comparison, ,we consider the following:
+As baseline models for comparison, we consider simple models based on the following algorithms:
+
 - Random model (predicts reorders randomly)
 - Logistic regression
 - Random Forest
-- LGBoost
+- LGBoost 
 
 ## TESTS
 
@@ -87,6 +98,11 @@ Here we show a plot showing the performance of the two main models and
 the gradient boost (LGboost) baseline model on the robustness tests
 
 ![Robustness tests](data/plot.png)
+
+We see the model with topological encoding (Model B) performs slightly better than the
+non-topological model (Model A), as well as the baseline gradient boost model (GB model), as we replace
+items in the robustness test.  These results are suggestive, but further study is needed
+to conclusively determine the effectiveness of this approach.
 
 ## DIRECTORY STRUCTURE
 
