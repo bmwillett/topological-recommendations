@@ -110,7 +110,7 @@ class TopModel(RecModel):
     details TBA
     """
     def __init__(self, user_latent_model=None, product_latent_model=None, feature_model=None,
-                 h_dims = (100,50), output_dim=1, n_components=5, NRNN=3, bypass=True):
+                 h_dims = (100, 50), output_dim=1, n_components=5, NRNN=3, bypass=True):
         super().__init__()
         log.debug("creating main topological model...")
         if user_latent_model is None:

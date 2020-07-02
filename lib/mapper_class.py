@@ -49,6 +49,10 @@ class MapperClassifier:
         self.mu = mu
         self.label = "PCA%d" % self.n_components
         self.data = None
+        self.data_len, self.data_features = None, None
+
+    def fit(self, data):
+        self.fit_transform(data)
 
     def fit_transform(self, data):
         """
@@ -57,7 +61,7 @@ class MapperClassifier:
         :param data: numpy array whose rows are training datapoints to fit to mapper-classifier
         :return: None
         """
-        if len(data.shape)>2:
+        if len(data.shape) > 2:
             log.debug("flattening data...")
         self.data = np.reshape(data, (data.shape[0], -1))
         self.data_len, self.data_features = self.data.shape
@@ -85,7 +89,7 @@ class MapperClassifier:
 
         :return: None
         """
-        if not self.remake and os.path.exists("%s_latent" % self.label):
+        if not self.remake and os.path.exists(TEMP_DATA + "%s_latent" % self.label):
             frin = open(TEMP_DATA + "%s_latent" % self.label, "rb")
             self.rep = pickle.load(frin)
             return
@@ -94,7 +98,7 @@ class MapperClassifier:
         pca = MyPCA(n_components=self.n_components)
         pca.fit(self.data)
 
-        self.rep = pca #LatentRep([pca], self.label)
+        self.rep = pca
         fr = open(TEMP_DATA + "%s_latent" % self.label, "wb")
         pickle.dump(self.rep, fr)
         fr.close()
@@ -105,7 +109,7 @@ class MapperClassifier:
 
         :return: None
         """
-        if not self.remake and os.path.exists("%s_firstsimplegap_graphs" % self.label):
+        if not self.remake and os.path.exists(TEMP_DATA + "%s_firstsimplegap_graphs" % self.label):
             fgin = open(TEMP_DATA + "%s_firstsimplegap_graphs" % self.label, "rb")
             self.graphs = pickle.load(fgin)
 
@@ -115,14 +119,13 @@ class MapperClassifier:
 
         clusterer = FirstSimpleGap()
         self.mapper_pipes = []
-        pca = self.rep
 
         log.debug("------> creating projection components...")
 
         for k in range(self.n_components):
             log.debug("---------> on component {}/{}...".format(k + 1, self.n_components))
             proj = Projection(columns=k)
-            filter_func = Pipeline(steps=[('pca', pca), ('proj', proj)])
+            filter_func = Pipeline(steps=[('pca', self.rep), ('proj', proj)])
             cover = OneDimensionalCover(n_intervals=self.n_intervals, overlap_frac=self.overlap_frac)
             mapper_pipe = make_mapper_pipeline(scaler=None,
                                                filter_func=filter_func,
@@ -259,12 +262,13 @@ class MapperClassifier:
 
         test_rep = np.zeros((test_data_len, self.mapper_features))
 
+        #TODO: problem here with inn sometimes being None, see changes above, get latent_models tests to run
         for i in range(test_data_len):
             nncompids = []
             nncompdists = []
             for j in range(self.n_components):
                 inn = int_nn.get((j, fullalphas[i][j]))
-                if (len(inn[2]) > self.NRNN):
+                if len(inn[2]) > self.NRNN:
                     knn = inn[0].kneighbors([test_data[i]])
                     ids = inn[2][knn[1]]
                     nncompids.append(ids.squeeze())

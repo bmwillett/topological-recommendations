@@ -1,8 +1,16 @@
-from lib.tools import *
+"""
+A set of baseline models used as points of comparison to main models.  includes
+
+- GetAll - predicts all products will be reordered
+- Random - predicts reorders randomly (with probability set by threshold)
+-
+
+"""
+import lib.tools as tools
 import lightgbm as lgb
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestRegressor
-from models.base_model import BaseModel
+from models.base_model import RecModel
 import pandas as pd
 import numpy as np
 import pickle
@@ -10,118 +18,95 @@ import logging
 
 log = logging.getLogger("TR_logger")
 
-class GetAllModel(BaseModel):
+
+class GetAllModel(RecModel):
+    """
+    Baseline model that predicts all products will be reordered
+    """
     def __init__(self):
+        log.debug("creating getall model...")
         super().__init__()
 
-    def fit(self, train_dataset):
+    def fit(self, dataset):
         pass
 
-    def predict(self, test_dataset, getdf=False):
-
-        prior_orders, test_labels = test_dataset.get_prior_products()
-
-        preds = np.ones(len(test_labels))
-
-        if getdf:
-            return preds, test_labels, prior_orders
-        else:
-            return preds, test_labels
+    def predict(self, dataset):
+        self.preds = np.ones(dataset.size)
+        return self.preds
 
 
-class RandomModel(BaseModel):
+class RandomModel(RecModel):
+    """
+    Baseline model that predicts product reorders randomly
+    """
     def __init__(self):
+        log.debug("creating random model...")
         super().__init__()
 
-    def fit(self, train_dataset):
+    def fit(self, dataset):
         pass
 
-    def predict(self, test_dataset, getdf=False):
-
-        prior_orders, test_labels = test_dataset.get_prior_products()
-
-        preds = np.random.rand(len(test_labels))
-
-        if getdf:
-            return preds, test_labels, prior_orders
-        else:
-            return preds, test_labels
+    def predict(self, dataset):
+        self.preds = np.random.rand(dataset.size)
+        return self.preds
 
 
-class LogisticModel(BaseModel):
-    def __init__(self, verbose=0):
+class LogisticModel(RecModel):
+    def __init__(self):
+        log.debug("creating logistic model...")
         super().__init__()
-        self.verbose=verbose
-
-    def fit(self, train_dataset):
-
-        prior_orders, labels = train_dataset.get_prior_products()
-
-        df_train = get_features(train_dataset, prior_orders, verbose=self.verbose)
-
-        X_train = df_train.to_numpy()
-
         self.model = LogisticRegression(random_state=0)
-        self.model.fit(X_train, labels)
 
-    def predict(self, test_dataset, getdf=False):
+    def fit(self, dataset):
+        log.debug("getting features...")
+        X_train = tools.get_features(dataset)
 
-        prior_orders, test_labels = test_dataset.get_prior_products()
+        log.debug("fitting classifier...")
+        self.model.fit(X_train, dataset.labels)
 
-        df_test = get_features(test_dataset, prior_orders, verbose=self.verbose)
+    def predict(self, dataset):
+        log.debug("getting features...")
+        X_test = tools.get_features(dataset)
 
-        X_test = df_test.to_numpy()
-        preds = self.model.predict(X_test)
+        log.debug("predicting with model...")
+        self.preds = self.model.predict(X_test)
 
-        if getdf:
-            return preds, test_labels, prior_orders
-        else:
-            return preds, test_labels
+        return self.preds
 
-class RandomForestModel(BaseModel):
-    def __init__(self, verbose=0):
+
+class RandomForestModel(RecModel):
+    def __init__(self):
+        log.debug("creating random forest model...")
         super().__init__()
-        self.verbose=verbose
-
-    def fit(self, train_dataset):
-
-        prior_orders, labels = train_dataset.get_prior_products()
-
-        df_train = get_features(train_dataset, prior_orders, verbose=self.verbose)
-
-        X_train = df_train.to_numpy()
-
         self.model = RandomForestRegressor(random_state=0)
-        self.model.fit(X_train, labels)
 
-    def predict(self, test_dataset, getdf=False):
+    def fit(self, dataset):
+        log.debug("getting features...")
+        X_train = tools.get_features(dataset)
 
-        prior_orders, test_labels = test_dataset.get_prior_products()
+        log.debug("fitting classifier...")
+        self.model.fit(X_train, dataset.labels)
 
-        df_test = get_features(test_dataset, prior_orders, verbose=self.verbose)
+    def predict(self, dataset):
+        log.debug("getting features...")
+        X_test = tools.get_features(dataset)
 
-        X_test = df_test.to_numpy()
-        preds = self.model.predict(X_test)
+        log.debug("predicting with model...")
+        self.preds = self.model.predict(X_test)
 
-        if getdf:
-            return preds, test_labels, prior_orders
-        else:
-            return preds, test_labels
+        return self.preds
 
-class LGBoostModel(BaseModel):
-    def __init__(self, verbose=0):
+
+class LGBoostModel(RecModel):
+    def __init__(self):
+        log.debug("creating lgboost model...")
         super().__init__()
-        self.verbose=verbose
 
-    def fit(self, train_dataset):
+    def fit(self, dataset, ROUNDS=100):
+        log.debug("getting features...")
+        df_train, categorical = tools.get_features(dataset, return_df=True, drop_categorical=False, return_categorical_list=True)
 
-        prior_orders, labels = train_dataset.get_prior_products()
-
-        df_train = get_features(train_dataset, prior_orders, verbose=self.verbose)
-
-        self.d_train = lgb.Dataset(df_train,
-                              label=labels,
-                              categorical_feature=['aisle_id', 'department_id'])
+        self.d_train = lgb.Dataset(df_train, label=dataset.labels, categorical_feature=categorical)
 
         params = {
             'task': 'train',
@@ -135,66 +120,82 @@ class LGBoostModel(BaseModel):
             'bagging_freq': 5
         }
 
-        ROUNDS = 100
-
+        log.debug("fitting classifier...")
         self.model = lgb.train(params, self.d_train, ROUNDS)
 
-    def predict(self, test_dataset, getdf=False):
+    def predict(self, dataset):
+        log.debug("getting features...")
+        df_test, categorical = tools.get_features(dataset, return_df=True, drop_categorical=False, return_categorical_list=True)
 
-        prior_orders, test_labels = test_dataset.get_prior_products()
+        self.d_test = lgb.Dataset(df_test,
+                                   label=dataset.labels,
+                                   categorical_feature=categorical)
 
-        df_test = get_features(test_dataset, prior_orders, verbose=self.verbose)
+        log.debug("predicting with model...")
+        self.preds = self.model.predict(df_test)
 
-        preds = self.model.predict(df_test)
-
-        if getdf:
-            return preds, test_labels, prior_orders
-        else:
-            return preds, test_labels
-
-
-class XGBoostModel(BaseModel):
-    def __init__(self, verbose=0):
-        super().__init__()
-        self.verbose=verbose
-
-    def fit(self, train_dataset):
-
-        prior_orders, labels = train_dataset.get_prior_products()
-
-        df_train = get_features(train_dataset, prior_orders, verbose=self.verbose)
-
-        # self.d_train = lgb.Dataset(df_train,
-        #                       label=labels,
-        #                       categorical_feature=['aisle_id', 'department_id'])
-
-        params = {
-            'task': 'train',
-            'boosting_type': 'gbdt',
-            'objective': 'binary',
-            'metric': {'binary_logloss'},
-            'num_leaves': 96,
-            'max_depth': 10,
-            'feature_fraction': 0.9,
-            'bagging_fraction': 0.95,
-            'bagging_freq': 5
-        }
-
-        ROUNDS = 100
-
-        self.model = xgb.train(params, df_train, ROUNDS)
-
-    def predict(self, test_dataset, getdf=False):
-
-        prior_orders, test_labels = test_dataset.get_prior_products()
-
-        df_test = get_features(test_dataset, prior_orders, verbose=self.verbose)
-
-        preds = self.model.predict(df_test)
-
-        if getdf:
-            return preds, test_labels, prior_orders
-        else:
-            return preds, test_labels
+        return self.preds
 
 
+# TESTING
+
+def run_tests(IC_DATA_DIR):
+    from lib.process_data import instacart_process
+    from lib.data_class import DataSet
+
+    # set random seed for consistent tests
+    np.random.seed(42)
+
+    # load data from instacart csv files (values below use testing directory)
+    order_data, product_data = instacart_process(data_dir=IC_DATA_DIR)
+
+    # create dataset
+    ic_dataset = DataSet(order_df=order_data, product_df=product_data)
+
+    # check dataframes created correctly
+    assert ic_dataset.order_df.shape == (31032, 4)
+    assert ic_dataset.product_df.shape == (6126, 5)
+
+    # perform train-test split
+    train_dataset, test_dataset = ic_dataset.train_test_split()
+    assert train_dataset.order_df.shape == (24939, 4)
+    assert test_dataset.order_df.shape == (6093, 4)
+
+    # getall model
+    model = GetAllModel()
+    model.fit(train_dataset)
+    model.predict(test_dataset)
+    assert model.preds.shape == test_dataset.labels.shape
+
+    # random model
+    model = RandomModel()
+    model.fit(train_dataset)
+    model.predict(test_dataset)
+    assert model.preds.shape == test_dataset.labels.shape
+
+    # logistic model
+    model = LogisticModel()
+    model.fit(train_dataset)
+    model.predict(test_dataset)
+    assert model.preds.shape == test_dataset.labels.shape
+
+    # random forest model
+    model = RandomForestModel()
+    model.fit(train_dataset)
+    model.predict(test_dataset)
+    assert model.preds.shape == test_dataset.labels.shape
+
+    # LGBoost model
+    model = LGBoostModel()
+    model.fit(train_dataset)
+    model.predict(test_dataset)
+    assert model.preds.shape == test_dataset.labels.shape
+
+    log.info("baseline_models tests passed!")
+
+
+if __name__ == '__main__':
+    IC_DATA_DIR = '../data/instacart_2017_05_01_testing/'
+    logging.basicConfig()
+    log.setLevel(logging.DEBUG)
+    run_tests(IC_DATA_DIR)

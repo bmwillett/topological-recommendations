@@ -89,8 +89,7 @@ def plot_with_labels(low_dim_embs, labels, filename='tsne.png'):
     plt.show()
 
 
-
-def get_features(dataset, drop_categorical=True, return_df=False):
+def get_features(dataset, drop_categorical=True, return_df=False, return_categorical_list=False):
     """
     preprocessing on data to extract following features:
 
@@ -101,6 +100,7 @@ def get_features(dataset, drop_categorical=True, return_df=False):
 
     :param drop_categorical: if true, drop categorical features ('aisle_id' and 'department_id')
     :param return_df: if true, return features in pandas df, else return numpy array
+                        also returns list of categorical features if not dropped
     """
 
     order_data = dataset.prior_order_df # train only on prior orders
@@ -172,18 +172,25 @@ def get_features(dataset, drop_categorical=True, return_df=False):
     df['UP_orders_ratio'] = (df.UP_orders / df.user_total_orders).astype(np.float32)
     df['UP_average_pos_in_cart'] = (df.z.map(userXproduct_.sum_pos_in_cart) / df.UP_orders).astype(np.float32)
 
-    log.debug(df.dtypes)
-    log.debug(df.memory_usage())
+    if log.getEffectiveLevel()<10:
+        log.debug(df.dtypes)
+        log.debug(df.memory_usage())
 
     f_to_use = ['user_total_orders', 'user_total_items', 'total_distinct_items',
                 'user_average_basket', 'aisle_id', 'department_id', 'product_orders',
                 'UP_orders', 'UP_orders_ratio', 'UP_average_pos_in_cart']
     df = df[f_to_use]
 
-    if drop_categorical:
-        df.drop(columns=['aisle_id', 'department_id'],inplace=True)\
+    categorical_features = ['aisle_id', 'department_id']
 
-    if return_df:
-        return df
+    if drop_categorical:
+        df.drop(columns=categorical_features, inplace=True)
+
+    df = df if return_df else df.to_numpy()
+
+    if return_categorical_list:
+        return df, categorical_features
     else:
-        return df.to_numpy()
+        return df
+
+

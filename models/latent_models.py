@@ -19,6 +19,7 @@ import pathlib
 import logging
 
 import lib.tools as tools
+from lib.mapper_class import MapperClassifier
 
 log = logging.getLogger("TR_logger")
 model_dir = pathlib.Path(__file__).parent.absolute()
@@ -117,7 +118,32 @@ class UserModel(LatentModel):
 
         return encoded_users
 
+# Topological User model
+class TopUserModel(LatentModel):
+    """
+    Topological user latent model
+    Takes previous autoencoder and includes further mapper encoding for topological protection
+    """
+    def __init__(self, n_components=5, NRNN=3):
+        log.debug("creating TopUserModel...")
+        self.user_model = UserModel()
+        self.n_components, self.NRNN = n_components, NRNN
+        self.mapper = MapperClassifier()
 
+    def fit(self, dataset, epochs=50, batch_size=32, retrain_mapper=True):
+        self.user_model.fit(dataset, epochs=epochs, batch_size=batch_size)
+        X_to_map = self.user_model.transform(dataset)
+
+        #TODO: add logic so only trains on each user once (code written somewhere...)
+
+        log.debug("encoding features with mapper-classifier...")
+        if retrain_mapper or self.X_map is None:
+            self.X_map = self.mapper.fit_transform(X_to_map)
+        log.debug(f"created mapper encoding of size {self.X_map.shape[1]}")
+
+    def transform(self, dataset):
+        X_to_map = self.user_model.transform(dataset)
+        return self.mapper.transform(X_to_map)
 
 # Product model
 class ProductModel(LatentModel):
@@ -251,7 +277,7 @@ def run_tests(IC_DATA_DIR):
 
     # create user latent model and fit to train_dataset
     user_latent = UserModel()
-    user_latent.fit(train_dataset)
+    user_latent.fit(train_dataset, epochs=2)
     assert user_latent.transform(train_dataset).shape == (9447, 32)
 
     # test encoding and decoding works as expected
@@ -261,6 +287,11 @@ def run_tests(IC_DATA_DIR):
     assert encoded_upm.shape == (154, 32)
     assert decoded_upm.shape == (154, 6126)
     assert (decoded_upm == autoencoded_upm).all()
+
+    # create topological user latent model and fit to train_dataset
+    top_user_latent = TopUserModel()
+    top_user_latent.fit(train_dataset, epochs=2)
+    print(top_user_latent.transform(train_dataset).shape)
 
     # manually compare original UPM and autoencoder prediction
     # print(train_dataset.user_prod_matrix[:5, :6])
