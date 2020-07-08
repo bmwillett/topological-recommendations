@@ -129,21 +129,29 @@ class TopUserModel(LatentModel):
         self.user_model = UserModel()
         self.n_components, self.NRNN = n_components, NRNN
         self.mapper = MapperClassifier()
+        self.X_to_map, self.X_map = None, None
 
     def fit(self, dataset, epochs=50, batch_size=32, retrain_mapper=True):
+        log.debug("fitting TopUserModel...")
         self.user_model.fit(dataset, epochs=epochs, batch_size=batch_size)
-        X_to_map = self.user_model.transform(dataset)
+        self.X_to_map = self.user_model.transform(dataset)
 
         #TODO: add logic so only trains on each user once (code written somewhere...)
 
         log.debug("encoding features with mapper-classifier...")
         if retrain_mapper or self.X_map is None:
-            self.X_map = self.mapper.fit_transform(X_to_map)
-        log.debug(f"created mapper encoding of size {self.X_map.shape[1]}")
+            self.mapper.fit(self.X_to_map)
+        log.debug(f"created mapper encoding of size {self.mapper.mapper_features}")
 
     def transform(self, dataset):
+        log.debug("transforming TopUserModel (test data)...")
         X_to_map = self.user_model.transform(dataset)
         return self.mapper.transform(X_to_map)
+
+    def fit_transform(self, dataset, epochs=50, batch_size=32, retrain_mapper=True):
+        log.debug("fit_transform in TopUserModel...")
+        self.fit(dataset, epochs=epochs, batch_size=batch_size, retrain_mapper=retrain_mapper)
+        return self.mapper.transform()
 
 # Product model
 class ProductModel(LatentModel):
@@ -290,10 +298,10 @@ def run_tests(IC_DATA_DIR):
 
     # create topological user latent model and fit to train_dataset
     top_user_latent = TopUserModel()
-    top_user_latent.fit(train_dataset, epochs=2)
-    print(top_user_latent.transform(train_dataset).shape)
+    top_user_latent.fit_transform(train_dataset, epochs=2)
+    assert top_user_latent.transform(test_dataset).shape == (2767, 219)
 
-    # manually compare original UPM and autoencoder prediction
+    # # manually compare original UPM and autoencoder prediction
     # print(train_dataset.user_prod_matrix[:5, :6])
     # print(autoencoded_upm[:5, :6])
 
@@ -323,4 +331,4 @@ if __name__ == '__main__':
     IC_DATA_DIR = '../data/instacart_2017_05_01_testing/'
     logging.basicConfig()
     log.setLevel(logging.DEBUG)
-    run_tests(IC_DATA_DIR)
+    model = run_tests(IC_DATA_DIR)

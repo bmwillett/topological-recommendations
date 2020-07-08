@@ -116,7 +116,7 @@ See above for more details on the models.
 │   ├── data_class.py       - definition of main dataset class
 │   ├── mapper_class.py     - mapper classifier implementation
 │   ├── process_data.py     - helper function to process data
-│   └── tools.py            - general helper functionsn
+│   └── tools.py            - general helper functions
 ├── models
 │   ├── base_model.py       - base model class which others inherit
 │   ├── baseline_models.py  - baseline models for comparison
@@ -125,7 +125,7 @@ See above for more details on the models.
 │   └── main_models.py      - main models
 └── tests
     ├── mnist_tests.ipynb   - some tests of mapper classifier on MNIST dataset
-    ├── run_all_tests.py    - runs all unit tests
+    ├── run_unit_tests.py    - runs all unit tests
     └── runtests.py         - runs main accuracy and robustness tests
 ```
 
