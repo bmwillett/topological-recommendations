@@ -140,14 +140,25 @@ pip install -r requirements.txt
 python tests/runtests.py
 ```
 
-> (PACKAGE COMING SOON!) 
->
-> To install top-choice package:
->
-> - In the command line, run:
-> ```console
-> pip install top-choice
-> ```
+To install top-choice package:
+
+- In the command line, run:
+```console
+pip install top_choice
+```
+Then, to use the package, eg (after loading data into Pandas dataframes order_data and product_data; see runtests.py for more details):
+```python
+from top_choice.lib.data_class import Dataset
+from top_choice.models.main_models import TopModel
+
+dataset = DataSet(order_data, product_data)
+train_dataset, test_dataset = dataset.train_test_split()
+
+model = TopModel()
+model.fit(train_dataset, epochs=50)
+model.predict(test_dataset)
+```
+
 
 
 
