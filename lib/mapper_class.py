@@ -44,12 +44,13 @@ class MapperClassifier:
     def __init__(self, n_batches=1, n_components=1, NRNN=3, remake=True, n_intervals=10, overlap_frac=0.33, delta=0.1, mu = 1e-05, label='mapper'):
         if not(type(n_batches) is int and n_batches>0):
             raise ValueError('n_batches must be a positive integer')
-        self.n_batches = n_batches
+        self.n_batches, self.label = n_batches, label
         self.mappers = [MapperClassifierBatch(n_components=n_components, NRNN=NRNN, remake=remake,
                                          n_intervals=n_intervals, overlap_frac=overlap_frac,
                                          delta=delta, mu=mu, label=label+'_'+str(i)) for i in range(self.n_batches)]
 
     def fit(self, data):
+        log.debug(f"fitting mapper {self.label}...")
         self.data_batches = np.array_split(data, self.n_batches)
         for mapper, data_batch in zip(self.mappers, self.data_batches):
             log.debug(f"fitting {mapper.label}...")
@@ -313,8 +314,6 @@ class MapperClassifierBatch:
             total_test_rep = np.loadtxt(TEMP_DATA + 'matrix_test_%s.csv' % self.label, delimiter=',', fmt='%f')
             return total_test_rep
 
-
-        assert test_data.shape[1]==self.data_features
         test_data_len = test_data.shape[0]
 
         # project the test data

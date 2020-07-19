@@ -8,3 +8,4 @@ scikit_learn>=0.21.3
 predictor==0.1.2
 adversary==1.1.1
 pymapper==0.1.0
+dask[complete]
