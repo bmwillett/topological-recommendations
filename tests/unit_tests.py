@@ -20,3 +20,11 @@ models.latent_models.run_tests(IC_DATA_DIR)
 models.baseline_models.run_tests(IC_DATA_DIR)
 models.main_models.run_tests(IC_DATA_DIR)
 log.info("all tests passed!")
+
+#TODO:
+# - fix mapper class tests
+# - get mnist tests working
+# - remake file to run models (model A, model B, lgboost)
+# - run on tiny, small datasets
+# - see how will run on medium/large, think about cloud
+# - update plots in talk if applicable

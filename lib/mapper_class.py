@@ -61,9 +61,11 @@ class MapperClassifier:
 
         # fit mappers along diagonal
         diagonal = []
+        self.mapper_features = 0
         for mapper, data_batch in zip(self.mappers, self.data_batches):
             log.debug(f"fitting {mapper.label}...")
             diagonal.append(mapper.fit_transform(data_batch))
+            self.mapper_features += mapper.mapper_features
 
         # fill rest of matrix
         output = []
@@ -72,7 +74,7 @@ class MapperClassifier:
             output.append([])
             for j in range(self.n_batches):
                 log.debug(f"------>using {j}th mapper...")
-                if i==j:
+                if i == j:
                     output[-1].append(diagonal[i])
                 else:
                     output[-1].append(self.mappers[j].transform(self.data_batches[i]))
@@ -123,7 +125,7 @@ class MapperClassifierBatch:
         """
         if len(data.shape) > 2:
             log.debug("flattening data...")
-        self.data =np.reshape(data, (data.shape[0], -1))
+        self.data = np.reshape(data, (data.shape[0], -1))
         (self.data_len, self.data_features) = self.data.shape
 
         log.debug(f"fitting mapper with data of total length {self.data_len} and {self.data_features} features.")
@@ -411,13 +413,13 @@ def run_tests():
     # set random seed for consistent tests
     np.random.seed(42)
 
-    mapper = MapperClassifier()
+    mapper = MapperClassifier(n_batches=3, n_components=5)
     X_train = np.random.rand(200, 100)
     X_train_map = mapper.fit_transform(X_train)
-    assert X_train_map.shape == (200, 285)
+    assert X_train_map.shape == (200, 1280)
     X_test = np.random.rand(100, 100)
     X_test_map = mapper.transform(X_test)
-    assert X_test_map.shape == (100, 285)
+    assert X_test_map.shape == (100, 1280)
 
     log.info("mapper_class tests passed!")
 

@@ -102,7 +102,6 @@ def get_features(dataset, drop_categorical=True, return_df=False, return_categor
     :param return_df: if true, return features in pandas df, else return numpy array
                         also returns list of categorical features if not dropped
     """
-
     order_data = dataset.prior_order_df # train only on prior orders
     product_data = dataset.product_df
 

@@ -68,7 +68,10 @@ class NonTopModel(RecModel):
 
         # build and train final_model neural network
         log.debug("building final model...")
+
         input_layer = Input(shape=(self.input_dim,))
+        if self.input_dim == 0:
+            raise ValueError("input dimension is zero; did you remember to include feature and/or latent models?")
         layers = [input_layer]
         for h_dim in self.h_dims:
             layers.append(Dense(h_dim, activation='relu')(layers[-1]))

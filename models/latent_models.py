@@ -140,7 +140,7 @@ class TopUserModel(LatentModel):
 
         log.debug("encoding features with mapper-classifier...")
         if retrain_mapper or self.X_map is None:
-            self.mapper.fit(self.X_to_map)
+            self.mapper.fit_transform(self.X_to_map)
         log.debug(f"created mapper encoding of size {self.mapper.mapper_features}")
 
     def transform(self, dataset):
@@ -151,7 +151,7 @@ class TopUserModel(LatentModel):
     def fit_transform(self, dataset, epochs=50, batch_size=32, retrain_mapper=True):
         log.debug("fit_transform in TopUserModel...")
         self.fit(dataset, epochs=epochs, batch_size=batch_size, retrain_mapper=retrain_mapper)
-        return self.mapper.transform()
+        return self.transform(dataset)
 
 # Product model
 class ProductModel(LatentModel):

@@ -3,6 +3,8 @@ Define Base recommendation model, all other recommendation models inherit from t
 """
 import numpy as np
 import logging
+import matplotlib.pyplot as plt
+from bisect import bisect_left
 
 log = logging.getLogger("TR_logger")
 
@@ -19,30 +21,37 @@ class RecModel:
                         on given data set
     """
     def __init__(self):
-        self.preds = None
+        self.preds, metrics, stats, class_sizes = None, None, None, None
         self.threshold = 0.5  # default threshold, should be set by find_threshold()
 
-    def find_threshold(self, dataset, pts=20, lower=0, upper=1):
+
+    def find_threshold(self, dataset, on_metric='f1'):
         """
         use a give (validation) dataset to search for the threshold which gives the highest metric
         currently uses f1 score as metric to optimize
 
         :param dataset: validation dataset used in optimization
-        :param pts: number of points in grid search of thresholds
-        :param lower: lower bound of grid seacrh
-        :param upper: upper bound of grid seacrh
+        :param on_metric: metric maximized in picking threshold (default = 'f1' (f1 score))
 
         :return: best threshold (also set to self.threshold and used as default threshold for model)
         """
-        log.debug(f"getting threshold: trying {pts} values in range ({lower},{upper})...")
-        to_try = np.linspace(lower, upper, num=pts)
-        best_t, best_f1 = 0, 0
-        for t in to_try:
-            self.evaluate(dataset, threshold=t)
-            if self.metrics[3] > best_f1:  # maximize f1 score
-                best_t, best_f1 = t, self.metrics[3]
-        self.threshold = best_t
+        self.get_stats(dataset)
+
+        best_pred, best = None, 0
+        for pred, fp, tp in self.stats:
+            tn, fn = self.class_sizes[0] - fp, self.class_sizes[1] - tp
+            prec = tp/(tp+fp)
+            rec = tp/(tp+fn)
+            f1 = 2*prec*rec/(prec+rec)
+            acc = (tp+tn)/sum(self.class_sizes)
+            test = {'prec': prec, 'rec': rec, 'f1': f1, 'acc': acc}[on_metric]
+            if test > best:
+                best_pred, best = pred, test
+                self.metrics = [prec, rec, f1, acc]
+
+        self.threshold = best_pred
         return self.threshold
+
 
     def evaluate(self, dataset, threshold=None):
         """
@@ -56,52 +65,67 @@ class RecModel:
         :param threshold: threshold to use for testing, or if None, use self.threshold
         :return: None
         """
-        log.debug("getting metrics...")
-        if threshold is None:
-            threshold = self.threshold
+        if threshold is not None:
+            self.threshold = threshold
+        if self.threshold is None:
+            raise ValueError("threshold not set")
 
+        self.get_stats(dataset)
+
+        idx = bisect_left(self.stats[:, 0], self.threshold)
+        fp, tp = self.stats[idx, 1:]
+        tn, fn = self.class_sizes[0] - fp, self.class_sizes[1] - tp
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+        f1 = 2 * prec * rec / (prec + rec)
+        acc = (tp + tn) / sum(self.class_sizes)
+
+        res_df = dataset.prior_user_prod.drop(columns=['product_id'])
+        res_df['preds'] = self.preds
+        res_df['labels'] = dataset.labels
+        res_df.sort_values(by=['user_id', 'preds'], ascending=False, inplace=True)
+
+        def _ndcg(labels):
+            return sum([1 / np.log(i + 2) if label == 1 else 0 for i, label in enumerate(labels.values)]) / sum(
+                [1 / np.log(i + 2) for i in range(sum(labels.values))]) if sum(labels.values) > 0 else 0
+
+
+        ndcg = res_df.groupby('user_id')['labels'].apply(_ndcg).values.mean()
+
+        self.metrics = {'prec': prec,
+                        'rec': rec,
+                        'f1': f1,
+                        'acc': acc,
+                        'ndcg': ndcg}
+        return self.metrics
+
+
+    def get_stats(self, dataset, plot_hist=False, plot_roc=False):
         preds = self.predict(dataset)
 
-        prior_user_prod = dataset.prior_user_prod
+        classes = {0: [], 1: []}
+        labels = {}
+        for pred, label in zip(preds, dataset.labels):
+            classes[label].append(pred)
+            labels[pred] = label
 
-        user_true = {}
-        user_pred = {}
-        user_pred_values = {}
-        for i, row in enumerate(prior_user_prod.itertuples()):
-            uid = row.user_id
-            pid = row.product_id
-            if uid not in user_true:
-                user_true[uid], user_pred[uid], user_pred_values[uid] = [], [], {}
-            user_pred_values[uid][pid] = preds[i]
-            if dataset.labels[i] == 1:
-                user_true[uid].append(pid)
-            if preds[i] > threshold:
-                user_pred[uid].append(pid)
+        classes[0], classes[1] = sorted(classes[0]), sorted(classes[1])
+        self.class_sizes = [len(classes[0]), len(classes[1])]
 
-        accs, precs, recs, f1s, ndcgs = [], [], [], [], []
-        for uid in user_true:
-            trues = set(user_true[uid])
-            preds = set(user_pred[uid])
+        if plot_hist:
+            plt.hist(classes[0])
+            plt.hist(classes[1])
+            plt.show()
 
-            tp = len(trues.intersection(preds))
-            fp = len(preds) - tp
-            fn = len(trues) - tp
-            tn = len(user_pred_values) - tp - fp - fn
+        self.stats, fp, tp = [], self.class_sizes[0], self.class_sizes[1]
+        for pred in sorted(labels.keys()):
+            if labels[pred] == 0:
+                fp -= 1
+            else:
+                tp -= 1
+            self.stats.append([pred, fp, tp])
+        self.stats = np.array(self.stats)
 
-            acc = (tp+tn)/(tp+tn+fp+fn) if (tp+tn+fp+fn)>0 else 1
-            prec = tp/(tp+fp) if tp+fp>0 else 1
-            rec = tp/(tp+fn) if tp+fn>0 else 1
-            f1 = (2*prec*rec)/(prec+rec) if prec+rec>0 else 0
-
-            accs.append(acc)
-            precs.append(prec)
-            recs.append(rec)
-            f1s.append(f1)
-
-            # compute dcg
-            ordered_preds = sorted((-user_pred_values[uid][pid], pid) for pid in user_pred_values[uid])
-            pred_rank = {x[1]: i for i, x in enumerate(ordered_preds)}  # gives predicted rank of ith product
-            ndcgs.append(sum([1/np.log(pred_rank[pid]+2) for pid in trues])/sum([1/np.log(i+2) for i in range(len(trues))])) if len(trues)>0 else 1
-
-        self.metrics = [np.mean(accs), np.mean(precs), np.mean(recs), np.mean(f1s), np.mean(ndcgs)]
-        return self.metrics
+        if plot_roc:
+            plt.plot(self.stats[:, 1]/self.class_sizes[0], self.stats[:, 2]/self.class_sizes[1])
+            plt.show()
